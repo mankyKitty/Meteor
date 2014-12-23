@@ -23,7 +23,12 @@ executable Meteor
   build-depends:       base >=4.7 && <4.8
                      , base-prelude
                      , mtl
+                     , transformers
+                     , bifunctors >= 4.2
+                     , either
                      , lens
                      , sdl2
+                     , text
+                     , bytestring
   hs-source-dirs:      src
   default-language:    Haskell2010
