@@ -1,8 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Main where
 
 import Prelude ()
-import BasePrelude
+import BasePrelude hiding (left,right)
 
 import qualified Graphics.UI.SDL as SDL
 
@@ -12,7 +13,7 @@ import Foreign.Ptr
 import Foreign (Storable,peek)
 
 import Control.Monad.IO.Class (MonadIO,liftIO)
-import Control.Monad.Except (ExceptT(..),runExceptT,throwError,MonadError(..))
+import Control.Monad.Trans.Either (EitherT(..),runEitherT,left,right)
 
 hgt :: CInt
 hgt = 640
@@ -20,34 +21,45 @@ hgt = 640
 wdt :: CInt
 wdt = 480
 
-type EEL m a = ExceptT SDLErr m a
+newtype El a = El
+  { unEl :: EitherT SDLErr IO a
+  } deriving ( Applicative
+             , Functor
+             , Monad
+             , MonadIO
+             )
 
 data SDLErr
   = SDLInitError
   | WindowCreationError
   deriving Show
 
-runSDLAction :: (Monad m, MonadIO m) => (a -> Bool) -> SDLErr -> IO a -> ExceptT SDLErr m a
-runSDLAction f e a = liftIO a >>= \r -> if f r then return r else throwError e
+runSDLAction :: (a -> Bool) -> SDLErr -> IO a -> El a
+runSDLAction f e a = liftIO a >>= \r -> El $ if f r then left e else right r
 
-initSDL :: (Monad m, MonadIO m) => [Word32] -> ExceptT SDLErr m CInt
-initSDL = runSDLAction (not . (<0)) SDLInitError . SDL.init . foldl (.|.) 0
+initSDL :: [Word32] -> El CInt
+initSDL = runSDLAction (<0) SDLInitError . SDL.init . foldl (.|.) 0
 
-createWin :: (Monad m, MonadIO m) => String -> ExceptT SDLErr m SDL.Window
-createWin t = runSDLAction (not . (==nullPtr)) WindowCreationError . withCAString t
+createWin :: String -> El SDL.Window
+createWin t = runSDLAction isNullPtr WindowCreationError . withCAString t
               $ \t' -> SDL.createWindow t' posUndef posUndef hgt wdt SDL.SDL_WINDOW_SHOWN
   where
     posUndef = SDL.SDL_WINDOWPOS_UNDEFINED
 
+isNullPtr :: Ptr a -> Bool
+isNullPtr = (==nullPtr)
+
 applyToPointer :: (Storable a) => (a -> b) -> Ptr a -> IO b
 applyToPointer op ptr = liftM op $ peek ptr
 
+elGrande :: (Monad m, MonadIO m) => El a -> m (Either SDLErr a)
+elGrande = liftIO . runEitherT . unEl
+
 main :: IO ()
 main = do
-  putStrLn "dooo eeet"
   -- init SDL video
   -- init and grab the window
-  eW <- runExceptT $ (initSDL [SDL.SDL_INIT_VIDEO] >> createWin "Main")
+  eW <- elGrande $initSDL [SDL.SDL_INIT_VIDEO] >> createWin "Main"
   either print runApp eW
 
   where
@@ -55,7 +67,7 @@ main = do
       -- get the window surface
       surface <- SDL.getWindowSurface w
       pixelFormat <- SDL.surfaceFormat `applyToPointer` surface
-      colour <- SDL.mapRGB pixelFormat 0xFF 0xFF 0xFF
+      colour <- SDL.mapRGB pixelFormat 0x00 0xFF 0xFF
 
       _ <- SDL.fillRect surface nullPtr colour
       _ <- SDL.updateWindowSurface w
