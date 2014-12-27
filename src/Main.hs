@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Main where
 
 import Prelude ()
@@ -7,71 +6,56 @@ import BasePrelude hiding (left,right)
 
 import qualified Graphics.UI.SDL as SDL
 
-import Foreign.C.String
 import Foreign.C.Types
-import Foreign.Ptr
-import Foreign (Storable,peek)
 
-import Control.Monad.IO.Class (MonadIO,liftIO)
-import Control.Monad.Trans.Either (EitherT(..),runEitherT,left,right)
+import Control.Lens ((#))
+import Control.Monad.IO.Class (liftIO,MonadIO)
+
+import Meteor.Types
+import Meteor.SDLExtras
 
 hgt :: CInt
-hgt = 640
+hgt = 480
 
 wdt :: CInt
-wdt = 480
+wdt = 640
 
-newtype El a = El
-  { unEl :: EitherT SDLErr IO a
-  } deriving ( Applicative
-             , Functor
-             , Monad
-             , MonadIO
-             )
+renderWith :: (SDL.Window,SDL.Renderer) -> El ()
+renderWith (_,rndrr) = do
+  -- get the window surface
+  let rectA = _Rect # (wdt `div` 4, hgt `div` 4, wdt `div` 2, hgt `div` 2)
+  let rectB = _Rect # (wdt `div` 3, hgt `div` 3, wdt `div` 2, hgt)
+              
+  setColour 0x00 0x00 0x00 0xFF >> clearRender
+  setColour 0x00 0xFF 0x00 0xFF >> dRect rectA
+  setColour 0xFF 0x00 0xFF 0x00 >> dRect rectB
 
-data SDLErr
-  = SDLInitError
-  | WindowCreationError
-  deriving Show
+  SDL.renderPresent rndrr
 
-runSDLAction :: (a -> Bool) -> SDLErr -> IO a -> El a
-runSDLAction f e a = liftIO a >>= \r -> El $ if f r then left e else right r
-
-initSDL :: [Word32] -> El CInt
-initSDL = runSDLAction (<0) SDLInitError . SDL.init . foldl (.|.) 0
-
-createWin :: String -> El SDL.Window
-createWin t = runSDLAction isNullPtr WindowCreationError . withCAString t
-              $ \t' -> SDL.createWindow t' posUndef posUndef hgt wdt SDL.SDL_WINDOW_SHOWN
   where
-    posUndef = SDL.SDL_WINDOWPOS_UNDEFINED
+    -- correct fuckin spelling :[
+    clearRender = runSDL' RenderClearError $ SDL.renderClear rndrr
+    setColour r g b a = runSDL' ColourSetError $ SDL.setRenderDrawColor rndrr r g b a
+    dRect = renderRect rndrr
 
-isNullPtr :: Ptr a -> Bool
-isNullPtr = (==nullPtr)
+quitApp :: (SDL.Window,SDL.Renderer) -> IO ()
+quitApp (w,r) = SDL.destroyRenderer r >> SDL.destroyWindow w >> SDL.quit
 
-applyToPointer :: (Storable a) => (a -> b) -> Ptr a -> IO b
-applyToPointer op ptr = liftM op $ peek ptr
+repeatUntilComplete :: (Monad m, MonadIO m) => m Bool -> m ()
+repeatUntilComplete op' = do
+  complete <- op'
+  unless complete $ repeatUntilComplete op'
 
-elGrande :: (Monad m, MonadIO m) => El a -> m (Either SDLErr a)
-elGrande = liftIO . runEitherT . unEl
+dieE :: SDLErr -> IO ()
+dieE e = putStrLn $ "ERROR: " <> show e
+
+mainLoop :: El ()
+mainLoop = do
+  initSDL [SDL.SDL_INIT_VIDEO] 
+  wR <- mkWindowAndRenderer hgt wdt
+  repeatUntilComplete $ renderWith wR >> handleEvents
+  where
+    handleEvents = liftIO (pollEvent >>= handleE)
 
 main :: IO ()
-main = do
-  -- init SDL video
-  -- init and grab the window
-  eW <- elGrande $initSDL [SDL.SDL_INIT_VIDEO] >> createWin "Main"
-  either print runApp eW
-
-  where
-    runApp w = do
-      -- get the window surface
-      surface <- SDL.getWindowSurface w
-      pixelFormat <- SDL.surfaceFormat `applyToPointer` surface
-      colour <- SDL.mapRGB pixelFormat 0x00 0xFF 0xFF
-
-      _ <- SDL.fillRect surface nullPtr colour
-      _ <- SDL.updateWindowSurface w
-      SDL.delay 2000
-
-      SDL.destroyWindow w
-      SDL.quit
+main = elGrande mainLoop >>= either dieE (\_ -> putStrLn "victory!")
