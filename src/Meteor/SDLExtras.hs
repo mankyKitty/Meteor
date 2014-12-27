@@ -1,8 +1,9 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Meteor.SDLExtras where
 
 import Prelude ()
-import BasePrelude hiding (left,right)
+import BasePrelude hiding (left,right,bool)
 
 import qualified Graphics.UI.SDL as SDL
 import Graphics.UI.SDL.Types (Rect(..))
@@ -11,9 +12,8 @@ import Foreign.C.Types
 import Foreign.Ptr
 import Foreign (Storable,peek,alloca,with,maybePeek)
 
-import Control.Lens (makePrisms,to,_1,_2,_3,(^.))
+import Control.Lens (makePrisms,to,_3,(^.),Traversal',Lens',lens)
 import Control.Monad.IO.Class (MonadIO,liftIO)
-import Control.Monad.Trans.Either (left,right)
 
 import Meteor.Types
 
@@ -24,27 +24,33 @@ type RectH = CInt
 
 -- Make some useful prisms !
 makePrisms ''Rect
+-- Rect lenses
+rectX' :: Lens' Rect CInt
+rectX' = lens rectX (\rct x -> rct { rectX = x })
 
-runSDL :: (a -> Bool) -> SDLErr -> IO a -> El a
-runSDL f e a = liftIO a >>= \r -> El $ if f r then left e else right r
+rectY' :: Lens' Rect CInt
+rectY' = lens rectY (\rct y -> rct { rectY = y })
 
-runSDL' :: SDLErr -> IO CInt -> El ()
-runSDL' e a = liftIO a >>= \res -> El $ if res < 0 then left e else right ()
+rectW' :: Lens' Rect CInt
+rectW' = lens rectW (\rct w -> rct { rectW = w })
 
-initSDL :: [Word32] -> El ()
-initSDL = runSDL' SDLInitError . SDL.init . foldl (.|.) 0
+rectH' :: Lens' Rect CInt
+rectH' = lens rectH (\rct h -> rct { rectH = h })
 
-chk :: IO (SDL.Window, SDL.Renderer,CInt) -> El (SDL.Window,SDL.Renderer)
-chk a = liftIO a >>= \b -> El $ if b ^. _3 . to (==0)
-                          then right (b ^. _1, b ^. _2)
-                          else left SDLWinAndRndrCreationError
+setRectPos :: Traversal' Rect CInt
+setRectPos f (Rect x y w h) =
+  Rect <$> f x <*> f y <*> pure w <*> pure h
 
-renderRect :: SDL.Renderer -> Rect -> El ()
-renderRect rndr rct = runSDL' RenderError . with rct $ SDL.renderDrawRect rndr
+initSDL :: HasIOErr m => [Word32] -> m ()
+initSDL = decide' SDLInitError . SDL.init . foldl (.|.) 0
 
-mkWindowAndRenderer :: CInt -> CInt -> El (SDL.Window, SDL.Renderer)
+renderRect :: HasIOErr m => SDL.Renderer -> Rect -> m ()
+renderRect rndr rct = decide' RenderError . with rct $ SDL.renderDrawRect rndr
+
+mkWindowAndRenderer :: HasIOErr m => CInt -> CInt -> m (SDL.Window, SDL.Renderer,CInt)
 mkWindowAndRenderer height width = chk . alloca $ \wP -> rF wP
   where
+    chk = decide (^. _3 . to (/= 0)) SDLWinAndRndrCreationError
     rF wPtr = alloca $ \rPtr -> do
       err <- liftIO $ SDL.createWindowAndRenderer width height SDL.SDL_WINDOW_SHOWN wPtr rPtr
       winPtr <- peek wPtr

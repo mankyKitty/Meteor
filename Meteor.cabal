@@ -26,6 +26,7 @@ executable Meteor
                      , transformers
                      , bifunctors >= 4.2
                      , either
+                     , errors
                      , lens
                      , sdl2
                      , text
