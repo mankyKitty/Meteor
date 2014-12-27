@@ -26,7 +26,7 @@ class (MonadIO m, MonadError SDLErr m) => HasIOErr m where
   decide :: (a -> Bool) -> SDLErr -> IO a -> m a
   decide' :: (Eq n, Num n) => SDLErr -> IO n -> m ()
 
-hasIOErr :: (MonadIO m, MonadError SDLErr m) => (a -> b) -> (a -> Bool) -> SDLErr -> IO a -> m b
+hasIOErr :: (MonadIO m, MonadError e m) => (a -> b) -> (a -> Bool) -> e -> IO a -> m b
 hasIOErr g f e a = liftIO a >>= \r -> bool (return $ g r) (throwError e) $ f r
 
 instance HasIOErr El where
