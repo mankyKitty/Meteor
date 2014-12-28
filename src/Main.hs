@@ -8,7 +8,7 @@ import qualified Graphics.UI.SDL as SDL
 
 import Foreign.C.Types
 
-import Control.Lens ((#))
+import Control.Lens ((#),(^.))
 import Control.Monad.IO.Class (liftIO,MonadIO)
 import Control.Monad.Trans.Either (runEitherT)
 import Control.Monad.State (gets)
@@ -26,8 +26,10 @@ getRects = [ _Rect # (wdt `div` 4, hgt `div` 4, wdt `div` 2, hgt `div` 2)
            , _Rect # (wdt `div` 3, hgt `div` 3, wdt `div` 2, hgt)
            ]
 
-getColours :: [(Word8,Word8,Word8,Word8)]
-getColours = [(0x00,0xFF,0x00,0xFF),(0xFF,0x00,0xFF,0x00)]
+getColours :: [Col]
+getColours = [ _Col # (0x00,0xFF,0x00,0xFF)
+             , _Col # (0xFF,0x00,0xFF,0x00)
+             ]
 
 renderWith :: El ()
 renderWith = do
@@ -43,11 +45,9 @@ renderWith = do
   SDL.renderPresent rndrr
 
   where
-    -- correct fuckin spelling :[
-    clearRender rndr = decide' RenderClearError $ SDL.renderClear rndr
-    setColour rndr r g b a = decide' ColourSetError $ SDL.setRenderDrawColor rndr r g b a
-
-    dRect rndr (rct,(r,g,b,a)) = setColour rndr r g b a >> renderRect rndr rct
+    dRect rndr (rct,c) = setColour rndr r g b a >> renderRect rndr rct
+      where
+        (r,g,b,a) = c ^. _Col
 
 quitApp :: (SDL.Window,SDL.Renderer) -> IO ()
 quitApp (w,r) = SDL.destroyRenderer r >> SDL.destroyWindow w >> SDL.quit

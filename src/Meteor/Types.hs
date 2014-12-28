@@ -20,22 +20,21 @@ data MeteorS = MeteorS
   , _meteorRects    :: [Rect]
   }
 makeLenses ''MeteorS
-makePrisms ''MeteorS
 
-class (MonadIO m, MonadError SDLErr m) => HasIOErr m where
+class (MonadIO m, MonadError SDLErr m) => HasSDLErr m where
   decide :: (a -> Bool) -> SDLErr -> IO a -> m a
   decide' :: (Eq n, Num n) => SDLErr -> IO n -> m ()
 
-hasIOErr :: (MonadIO m, MonadError e m) => (a -> b) -> (a -> Bool) -> e -> IO a -> m b
-hasIOErr g f e a = liftIO a >>= \r -> bool (return $ g r) (throwError e) $ f r
+hasSDLErr :: (MonadIO m, MonadError e m) => (a -> b) -> (a -> Bool) -> e -> IO a -> m b
+hasSDLErr g f e a = liftIO a >>= \r -> bool (return $ g r) (throwError e) $ f r
 
-instance HasIOErr El where
-  decide  = hasIOErr id
-  decide' = hasIOErr (const ()) (/= 0)
+instance HasSDLErr El where
+  decide  = hasSDLErr id
+  decide' = hasSDLErr (const ()) (/= 0)
 
-instance HasIOErr (EitherT SDLErr IO) where
-  decide  = hasIOErr id
-  decide' = hasIOErr (const ()) (/= 0)
+instance HasSDLErr (EitherT SDLErr IO) where
+  decide  = hasSDLErr id
+  decide' = hasSDLErr (const ()) (/= 0)
   
 type Et a = EitherT SDLErr IO a
 
@@ -57,6 +56,15 @@ data SDLErr
   | RenderClearError
   | ColourSetError
   deriving Show
+
+data Col = Col
+  { _colRed   :: Word8
+  , _colGreen :: Word8
+  , _colBlue  :: Word8
+  , _colAlpha :: Word8
+  } deriving Show
+makeLenses ''Col
+makePrisms ''Col
 
 runEl :: (Monad m, MonadIO m) => MeteorS -> El a -> m (Either SDLErr (a,MeteorS))
 runEl meteorS = liftIO . runEitherT . flip runStateT meteorS . unEl

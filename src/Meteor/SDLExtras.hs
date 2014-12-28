@@ -41,13 +41,10 @@ setRectPos :: Traversal' Rect CInt
 setRectPos f (Rect x y w h) =
   Rect <$> f x <*> f y <*> pure w <*> pure h
 
-initSDL :: HasIOErr m => [Word32] -> m ()
+initSDL :: HasSDLErr m => [Word32] -> m ()
 initSDL = decide' SDLInitError . SDL.init . foldl (.|.) 0
 
-renderRect :: HasIOErr m => SDL.Renderer -> Rect -> m ()
-renderRect rndr rct = decide' RenderError . with rct $ SDL.renderDrawRect rndr
-
-mkWindowAndRenderer :: HasIOErr m => CInt -> CInt -> m (SDL.Window, SDL.Renderer,CInt)
+mkWindowAndRenderer :: HasSDLErr m => CInt -> CInt -> m (SDL.Window, SDL.Renderer,CInt)
 mkWindowAndRenderer height width = chk . alloca $ \wP -> rF wP
   where
     chk = decide (^. _3 . to (/= 0)) SDLWinAndRndrCreationError
@@ -101,4 +98,13 @@ with3 f x y z = liftIO $ with x (\x' -> with y (\y' -> with z (\z' -> f x' y' z'
 rectIntersect :: MonadIO m => Rect -> Rect -> m Bool
 rectIntersect r1 r2 = with3 (SDL.intersectRect) r1 r2 overlap
   where overlap = Rect { rectX = 0,rectY = 0,rectW = 0,rectH = 0 }
+
+clearRender :: HasSDLErr m => SDL.Renderer -> m ()
+clearRender rndr = decide' RenderClearError $ SDL.renderClear rndr
+
+setColour :: HasSDLErr m => SDL.Renderer -> Word8 -> Word8 -> Word8 -> Word8 -> m ()
+setColour rndr r g b a = decide' ColourSetError $ SDL.setRenderDrawColor rndr r g b a
+
+renderRect :: HasSDLErr m => SDL.Renderer -> Rect -> m ()
+renderRect rndr rct = decide' RenderError . with rct $ SDL.renderDrawRect rndr
 
