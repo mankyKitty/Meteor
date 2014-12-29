@@ -16,6 +16,7 @@ import Control.Lens (makePrisms,to,_3,(^.),Traversal',Lens',lens)
 import Control.Monad.IO.Class (MonadIO,liftIO)
 
 import Meteor.Types
+import Foreign.C (withCAString)
 
 type RectX = CInt
 type RectY = CInt
@@ -41,9 +42,28 @@ setRectPos :: Traversal' Rect CInt
 setRectPos f (Rect x y w h) =
   Rect <$> f x <*> f y <*> pure w <*> pure h
 
-initSDL :: HasSDLErr m => [Word32] -> m ()
-initSDL = decide' SDLInitError . SDL.init . foldl (.|.) 0
+bitOr :: [Word32] -> Word32
+bitOr = foldl (.|.) 0
 
+initSDL :: HasSDLErr m => [Word32] -> m ()
+initSDL = decide' SDLInitError . SDL.init . bitOr
+
+mkRenderer :: HasSDLErr m => SDL.Window -> m SDL.Renderer
+mkRenderer w = decide isNullPtr RendererCreateError $ SDL.createRenderer w (-1) flags
+  where
+    flags = bitOr [SDL.SDL_RENDERER_ACCELERATED,SDL.SDL_RENDERER_PRESENTVSYNC]
+
+mkWindow :: HasSDLErr m => String -> CInt -> CInt -> m SDL.Window
+mkWindow t h w = decide isNullPtr WindowCreateError . withCAString t $ \title ->
+                 SDL.createWindow title
+                 SDL.SDL_WINDOWPOS_UNDEFINED
+                 SDL.SDL_WINDOWPOS_UNDEFINED
+                 w
+                 h
+                 flags
+  where
+    flags = bitOr [SDL.SDL_WINDOW_OPENGL,SDL.SDL_WINDOW_INPUT_GRABBED]
+           
 mkWindowAndRenderer :: HasSDLErr m => CInt -> CInt -> m (SDL.Window, SDL.Renderer,CInt)
 mkWindowAndRenderer height width = chk . alloca $ \wP -> rF wP
   where
@@ -87,7 +107,7 @@ with2
   -> a
   -> b
   -> m c
-with2 f x y = liftIO $ with x (\x' -> with y (\y' -> f x' y'))
+with2 f x y = liftIO $ with x (\x' -> with y $ f x')
 
 with3
   :: (Storable a, Storable b, Storable c, Monad m, MonadIO m)
@@ -96,10 +116,10 @@ with3
   -> b
   -> c
   -> m d
-with3 f x y z = liftIO $ with x (\x' -> with y (\y' -> with z (\z' -> f x' y' z')))
+with3 f x y z = liftIO $ with x (\x' -> with y (\y' -> with z $ f x' y' ))
 
 rectIntersect :: MonadIO m => Rect -> Rect -> m Bool
-rectIntersect r1 r2 = with3 (SDL.intersectRect) r1 r2 overlap
+rectIntersect r1 r2 = with3 SDL.intersectRect r1 r2 overlap
   where overlap = Rect { rectX = 0,rectY = 0,rectW = 0,rectH = 0 }
 
 clearRender :: HasSDLErr m => SDL.Renderer -> m ()

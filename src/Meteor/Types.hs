@@ -14,10 +14,21 @@ import Control.Monad.State (StateT(..),MonadState)
 import Control.Monad.Except (MonadError,throwError)
 import Graphics.UI.SDL (Window,Renderer,Rect)
 
+data Col = Col
+  { _colRed   :: Word8
+  , _colGreen :: Word8
+  , _colBlue  :: Word8
+  , _colAlpha :: Word8
+  } deriving Show
+makeLenses ''Col
+makePrisms ''Col
+
 data MeteorS = MeteorS
   { _meteorWindow   :: Window
   , _meteorRenderer :: Renderer
-  , _meteorRects    :: (Rect,Rect)
+  , _meteorPlayer   :: (Rect,Col)
+  , _meteorMissiles :: [Rect]
+  , _meteorMobs     :: [Rect]
   , _gameover       :: Bool
   }
 makeLenses ''MeteorS
@@ -51,21 +62,13 @@ newtype El a = El
 
 data SDLErr
   = SDLInitError
-  | WindowCreationError
+  | WindowCreateError
+  | RendererCreateError
   | SDLWinAndRndrCreationError
   | RenderError
   | RenderClearError
   | ColourSetError
   deriving Show
-
-data Col = Col
-  { _colRed   :: Word8
-  , _colGreen :: Word8
-  , _colBlue  :: Word8
-  , _colAlpha :: Word8
-  } deriving Show
-makeLenses ''Col
-makePrisms ''Col
 
 runEl :: (Monad m, MonadIO m) => MeteorS -> El a -> m (Either SDLErr (a,MeteorS))
 runEl meteorS = liftIO . runEitherT . flip runStateT meteorS . unEl
