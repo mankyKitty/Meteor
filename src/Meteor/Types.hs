@@ -17,12 +17,13 @@ import Graphics.UI.SDL (Window,Renderer,Rect)
 data MeteorS = MeteorS
   { _meteorWindow   :: Window
   , _meteorRenderer :: Renderer
-  , _meteorRects    :: [Rect]
+  , _meteorRects    :: (Rect,Rect)
+  , _gameover       :: Bool
   }
 makeLenses ''MeteorS
 
 class (MonadIO m, MonadError SDLErr m) => HasSDLErr m where
-  decide :: (a -> Bool) -> SDLErr -> IO a -> m a
+  decide  :: (a -> Bool) -> SDLErr -> IO a -> m a
   decide' :: (Eq n, Num n) => SDLErr -> IO n -> m ()
 
 hasSDLErr :: (MonadIO m, MonadError e m) => (a -> b) -> (a -> Bool) -> e -> IO a -> m b

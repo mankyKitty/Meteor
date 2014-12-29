@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 module Main where
 
 import Prelude ()
@@ -8,10 +9,10 @@ import qualified Graphics.UI.SDL as SDL
 
 import Foreign.C.Types
 
-import Control.Lens ((#),(^.))
-import Control.Monad.IO.Class (liftIO,MonadIO)
+import Control.Lens ((#),(^.),_1,_2,(&),(.~),(%~))
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Either (runEitherT)
-import Control.Monad.State (gets)
+import Control.Monad.State (gets,modify)
 import Meteor.Types
 import Meteor.SDLExtras
 
@@ -21,27 +22,30 @@ hgt = 480
 wdt :: CInt
 wdt = 640
 
-getRects :: [SDL.Rect]
-getRects = [ _Rect # (wdt `div` 4, hgt `div` 4, wdt `div` 2, hgt `div` 2) 
-           , _Rect # (wdt `div` 3, hgt `div` 3, wdt `div` 2, hgt)
-           ]
+getRects :: (SDL.Rect,SDL.Rect)
+getRects = ( _Rect # (wdt `div` 4, hgt `div` 4, wdt `div` 2, hgt `div` 2) 
+           , _Rect # (30, 30, 30, 30)
+           )
 
-getColours :: [Col]
-getColours = [ _Col # (0x00,0xFF,0x00,0xFF)
+getColours :: (Col,Col)
+getColours = ( _Col # (0x00,0xFF,0x00,0xFF)
              , _Col # (0xFF,0x00,0xFF,0x00)
-             ]
+             )
 
 renderWith :: El ()
 renderWith = do
+  let cs = getColours
   rndrr <- gets _meteorRenderer
-  rects <- gets _meteorRects
+  (fence,player) <- gets _meteorRects
               
-  let actors = zip rects getColours
-
+  -- set the background colour
   setColour rndrr 0x00 0x00 0x00 0xFF >> clearRender rndrr
 
-  traverse_ (dRect rndrr) actors
+  -- draw every rect to the screen
+  dRect rndrr (fence, cs ^. _1)
+  dRect rndrr (player, cs ^. _2)
 
+  -- present the updates.
   SDL.renderPresent rndrr
 
   where
@@ -49,22 +53,46 @@ renderWith = do
       where
         (r,g,b,a) = c ^. _Col
 
-quitApp :: (SDL.Window,SDL.Renderer) -> IO ()
-quitApp (w,r) = SDL.destroyRenderer r >> SDL.destroyWindow w >> SDL.quit
+quitApp :: El ()
+quitApp = do
+  gets _meteorRenderer >>= SDL.destroyRenderer
+  gets _meteorWindow >>= SDL.destroyWindow
+  SDL.quit
 
-repeatUntilComplete :: (Monad m, MonadIO m) => m Bool -> m ()
+repeatUntilComplete :: El Bool -> El ()
 repeatUntilComplete op' = do
-  complete <- op'
-  unless complete $ repeatUntilComplete op'
+  fin <- op'
+  unless fin $ repeatUntilComplete op'
 
 dieE :: SDLErr -> IO ()
 dieE e = putStrLn $ "ERROR: " <> show e
 
-mainLoop :: El ()
-mainLoop = do
-  repeatUntilComplete $ renderWith >> handleEvents
+moveP :: SDL.Keysym -> MeteorS -> MeteorS
+moveP k s = case SDL.keysymKeycode k of
+  SDL.SDLK_w -> upd (subtract distance)
+  SDL.SDLK_s -> upd (+distance)
+  SDL.SDLK_a -> lfr (subtract distance)
+  SDL.SDLK_d -> lfr (+distance)
+  _ -> s
   where
-    handleEvents = liftIO (pollEvent >>= handleE)
+    distance = 5
+    lfr :: (CInt -> CInt) -> MeteorS
+    lfr f = s & meteorRects . _2 . rectX' %~ f
+    upd :: (CInt -> CInt) -> MeteorS
+    upd f = s & meteorRects . _2 . rectY' %~ f
+
+updatePlayer :: SDL.Event -> MeteorS -> MeteorS
+updatePlayer (SDL.KeyboardEvent _ _ _ _ _ kSym) m = moveP kSym m
+updatePlayer _ m = m
+
+updateActors :: Maybe SDL.Event -> El ()
+updateActors = maybe (return ()) (modify . updatePlayer)
+
+mainLoop :: El ()
+mainLoop = repeatUntilComplete (renderWith >> handleInputs >> hExit)
+  where
+    hExit = liftIO (pollEvent >>= handleE)
+    handleInputs = liftIO pollEvent >>= updateActors
 
 initialise :: Et (SDL.Window,SDL.Renderer)
 initialise = do
@@ -77,11 +105,11 @@ createMeteor = do
   eM <- runEitherT initialise 
   return $ mkMeteor <$> eM
   where
-    mkMeteor (w,r) = MeteorS w r $ getRects
+    mkMeteor (w,r) = MeteorS w r getRects False
   
 main :: IO ()
 main = do
   mS <- createMeteor
   case mS of
     Left e -> dieE e
-    Right m -> runEl m mainLoop >>= either dieE (\_ -> putStrLn "victory!")
+    Right m -> runEl m (mainLoop >> quitApp) >>= either dieE (\_ -> putStrLn "victory!")

@@ -49,7 +49,10 @@ mkWindowAndRenderer height width = chk . alloca $ \wP -> rF wP
   where
     chk = decide (^. _3 . to (/= 0)) SDLWinAndRndrCreationError
     rF wPtr = alloca $ \rPtr -> do
-      err <- liftIO $ SDL.createWindowAndRenderer width height SDL.SDL_WINDOW_SHOWN wPtr rPtr
+      err <- liftIO $ SDL.createWindowAndRenderer
+             width height
+             SDL.SDL_WINDOW_OPENGL
+             wPtr rPtr
       winPtr <- peek wPtr
       renPtr <- peek rPtr
       return (winPtr,renPtr,err)
