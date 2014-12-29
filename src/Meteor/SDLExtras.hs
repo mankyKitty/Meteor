@@ -130,4 +130,3 @@ setColour rndr r g b a = decide' ColourSetError $ SDL.setRenderDrawColor rndr r 
 
 renderRect :: HasSDLErr m => SDL.Renderer -> Rect -> m ()
 renderRect rndr rct = decide' RenderError . with rct $ SDL.renderDrawRect rndr
-

@@ -9,7 +9,7 @@ import BasePrelude hiding (left,right)
 
 import qualified Graphics.UI.SDL as SDL
 
-import Control.Lens (Lens',(^.),_1,(&),(%~),(#),traversed,(-=))
+import Control.Lens (Lens',(^.),_1,(&),(%~),(#),traversed,(-=),to,(%=))
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Either (runEitherT)
 import Control.Monad.State (gets,modify)
@@ -22,19 +22,26 @@ import Meteor.Core
 
 renderWith :: El ()
 renderWith = do
+  -- fetch our renderer
+  rndrr <- gets _meteorRenderer
+  -- FIRE ZE MISSILEZ!
+  -- Remove all offscreen missiles
   -- Move all the missiles
+  meteorMissiles %= filter (^. rectY' . to (>= 0))
   meteorMissiles . traversed . rectY' -= 2
 
-  rndrr <- gets _meteorRenderer
-
+  -- Get our player
   plyr <- gets _meteorPlayer
               
   -- set the background colour
   setColour rndrr 0x00 0x00 0x00 0xFF >> clearRender rndrr
 
+  -- Render the player on the screen
   dRect rndrr plyr
 
+  -- Get our missiles
   ms <- gets _meteorMissiles
+  -- Render all missiles
   traverse_ (dRect rndrr . (,missileColour)) ms
 
   -- present the updates.
