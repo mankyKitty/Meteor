@@ -118,6 +118,12 @@ with3
   -> m d
 with3 f x y z = liftIO $ with x (\x' -> with y (\y' -> with z $ f x' y' ))
 
+actorIntersect :: MonadIO m => Actor -> Actor -> m Bool
+actorIntersect a b = rectIntersect aRect bRect
+  where
+    aRect = a ^. actorRect
+    bRect = b ^. actorRect
+
 rectIntersect :: MonadIO m => Rect -> Rect -> m Bool
 rectIntersect r1 r2 = with3 SDL.intersectRect r1 r2 overlap
   where overlap = Rect { rectX = 0,rectY = 0,rectW = 0,rectH = 0 }

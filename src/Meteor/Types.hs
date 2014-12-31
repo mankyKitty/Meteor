@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 module Meteor.Types where
 
 import Prelude ()
@@ -14,6 +15,8 @@ import Control.Monad.State (StateT(..),MonadState)
 import Control.Monad.Except (MonadError,throwError)
 import Graphics.UI.SDL (Window,Renderer,Rect)
 
+import Data.Map (Map)
+
 data Col = Col
   { _colRed   :: Word8
   , _colGreen :: Word8
@@ -23,12 +26,29 @@ data Col = Col
 makeLenses ''Col
 makePrisms ''Col
 
+data ActorType
+  = Player
+  | NPC
+  | Bullet
+  deriving (Show,Eq)
+
+data Actor = Actor
+  { _actorRect :: Rect
+  , _actorType :: ActorType
+  } deriving (Show,Eq)
+makeLenses ''Actor
+
+type Player = Actor
+type NPC = Actor
+
+type ActorMap = Map Int Actor
+
 data MeteorS = MeteorS
   { _meteorWindow   :: Window
   , _meteorRenderer :: Renderer
-  , _meteorPlayer   :: (Rect,Col)
-  , _meteorMissiles :: [Rect]
-  , _meteorMobs     :: [Rect]
+  , _meteorPlayer   :: (Player,Col)
+  , _meteorMissiles :: ActorMap
+  , _meteorMobs     :: ActorMap
   , _gameover       :: Bool
   }
 makeLenses ''MeteorS
