@@ -10,7 +10,7 @@ import BasePrelude hiding (left,right)
 import qualified Graphics.UI.SDL as SDL
 import qualified Data.Map as Map
 
-import Control.Lens (Lens',(^.),_1,(&),(%~),(#),traversed,(-=),to,(%=),(+=))
+import Control.Lens (Lens',(^.),_1,(&),(%~),(#),traversed,(-=),to,(%=),(+=),(.~))
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Either (runEitherT)
 import Control.Monad.State (gets,modify)
@@ -81,11 +81,6 @@ quitApp = do
   gets _meteorWindow >>= SDL.destroyWindow
   SDL.quit
 
-repeatUntilComplete :: El Bool -> El ()
-repeatUntilComplete op' = do
-  fin <- op'
-  unless fin $ repeatUntilComplete op'
-
 dieE :: SDLErr -> IO ()
 dieE e = putStrLn $ "ERROR: " <> show e
 
@@ -93,6 +88,7 @@ addMissile :: MeteorS -> ActorMap -> ActorMap
 addMissile s ms = Map.insert nextId newM ms
   where
     nextId = succ $ Map.size ms
+
     ppos :: Lens' SDL.Rect CInt -> CInt
     ppos l = s ^. meteorPlayer . _1 . actorRect . l
 
@@ -117,15 +113,18 @@ moveP k s = case SDL.keysymKeycode k of
 
 updatePlayer :: SDL.Event -> MeteorS -> MeteorS
 updatePlayer (SDL.KeyboardEvent SDL.SDL_KEYDOWN _ _ _ _ kSym) m = moveP kSym m
+updatePlayer (SDL.QuitEvent _ _) m = m & gameover .~ True
 updatePlayer _ m = m
 
 updateActors :: Maybe SDL.Event -> El ()
 updateActors = maybe (return ()) (modify . updatePlayer)
 
 mainLoop :: El ()
-mainLoop = repeatUntilComplete (renderWith >> handleInputs >> hExit)
+mainLoop = do
+  renderWith >> handleInputs
+  fin <- gets _gameover
+  unless fin mainLoop
   where
-    hExit = liftIO (pollEvent >>= handleE)
     handleInputs = liftIO pollEvent >>= updateActors
 
 initialise :: Et (SDL.Window,SDL.Renderer)
@@ -140,16 +139,14 @@ createMeteor = do
   eM <- runEitherT initialise 
   return $ mkMeteor <$> eM
   where
-    mkMeteor (w,r) = MeteorS
-                     w
-                     r
+    emptyBullets :: ActorMap
+    emptyBullets = Map.empty
+
+    mkMeteor (w,r) = MeteorS w r
                      getInitialPlayer
                      emptyBullets -- no missiles to start the game
                      getInitialMobs
                      False
-
-emptyBullets :: ActorMap
-emptyBullets = Map.empty
 
 main :: IO ()
 main = do
