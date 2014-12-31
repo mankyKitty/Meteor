@@ -119,10 +119,24 @@ updatePlayer _ m = m
 updateActors :: Maybe SDL.Event -> El ()
 updateActors = maybe (return ()) (modify . updatePlayer)
 
+checkGameOver :: El Bool
+checkGameOver = do
+  fin <- gets _gameover
+  win <- gets _meteorMobs
+  p <- gets _meteorPlayer
+  return $ or [ fin
+              , 0 == Map.size win
+              , notEmpty $ passedPlayer p win
+              ]
+  where
+    notEmpty = (>0) . Map.size
+    passedPlayer p =
+      Map.filter (^. actorRect . rectY' . to (>= p ^. _1 . actorRect . rectY'))
+
 mainLoop :: El ()
 mainLoop = do
   renderWith >> handleInputs
-  fin <- gets _gameover
+  fin <- checkGameOver
   unless fin mainLoop
   where
     handleInputs = liftIO pollEvent >>= updateActors
@@ -153,4 +167,5 @@ main = do
   mS <- createMeteor
   case mS of
     Left e -> dieE e
-    Right m -> runEl m (mainLoop >> quitApp) >>= either dieE (\_ -> putStrLn "victory!")
+    Right m -> runEl m (mainLoop >> quitApp)
+               >>= either dieE (\_ -> putStrLn "You might have won...")
