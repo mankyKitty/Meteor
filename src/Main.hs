@@ -9,7 +9,7 @@ import BasePrelude hiding (left,right)
 
 import qualified Graphics.UI.SDL as SDL
 
-import Control.Lens (Lens',(^.),_1,(&),(%~),(#),traversed,(-=),to,(%=))
+import Control.Lens (Lens',(^.),_1,(&),(%~),(#),traversed,(-=),to,(%=),(+=),(.=))
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Either (runEitherT)
 import Control.Monad.State (gets,modify)
@@ -22,6 +22,7 @@ import Meteor.Core
 
 renderWith :: El ()
 renderWith = do
+  ts <- SDL.getTicks
   -- fetch our renderer
   rndrr <- gets _meteorRenderer
   -- FIRE ZE MISSILEZ!
@@ -30,6 +31,14 @@ renderWith = do
   meteorMissiles %= filter (^. rectY' . to (>= 0))
   meteorMissiles . traversed . rectY' -= 2
 
+  -- Remove any mobs hit with missile
+  mss <- gets _meteorMissiles
+  mobs' <- gets _meteorMobs
+
+  survivors <- liftIO $ hitMobs mobs' mss
+  meteorMobs .= survivors
+  -- Move all enemies down a rank
+  when (ts `mod` 12 == 0) $ meteorMobs . traversed . rectY' += 2
   -- Get our player
   plyr <- gets _meteorPlayer
               
@@ -41,8 +50,10 @@ renderWith = do
 
   -- Get our missiles
   ms <- gets _meteorMissiles
+  mobs <- gets _meteorMobs
   -- Render all missiles
   traverse_ (dRect rndrr . (,missileColour)) ms
+  traverse_ (dRect rndrr . (,mobColour)) mobs
 
   -- present the updates.
   SDL.renderPresent rndrr
@@ -120,7 +131,7 @@ createMeteor = do
                      r
                      getInitialPlayer
                      [] -- no missiles to start the game
-                     [] -- no mobs to start just yet.
+                     getInitialMobs
                      False
   
 main :: IO ()
