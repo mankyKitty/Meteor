@@ -107,7 +107,7 @@ with2
   -> a
   -> b
   -> m c
-with2 f x y = liftIO $ with x (\x' -> with y $ f x')
+with2 f x y = liftIO . with x $ with y . f
 
 with3
   :: (Storable a, Storable b, Storable c, Monad m, MonadIO m)
@@ -116,7 +116,7 @@ with3
   -> b
   -> c
   -> m d
-with3 f x y z = liftIO $ with x (\x' -> with y (\y' -> with z $ f x' y' ))
+with3 f x y z = liftIO $ with x (\x' -> with y $ with z . f x')
 
 actorIntersect :: MonadIO m => Actor -> Actor -> m Bool
 actorIntersect a b = rectIntersect aRect bRect

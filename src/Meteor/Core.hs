@@ -74,7 +74,7 @@ hitsRegistered bullets mob = (^. _1) <$> hit
 getHits :: ActorMap -> ActorMap -> Maybe ([Int],[Int])
 getHits m b
   | b == mempty = Nothing
-  | otherwise = mayHits $ hits
+  | otherwise = mayHits hits
   where
     toTuple = Just . ((,) <$> Map.keys <*> Map.elems)
     mayHits h = bool Nothing (toTuple h) $ Map.size h > 0
