@@ -8,13 +8,14 @@ module Meteor.Types where
 import Prelude ()
 import BasePrelude
 
-import Control.Lens (makeLenses,makePrisms)
+import Control.Lens (makeLenses,makePrisms,view)
 import Control.Monad.IO.Class (MonadIO,liftIO)
 import Control.Monad.Trans.Either (EitherT(..),runEitherT)
 import Control.Monad.State (StateT(..),MonadState)
 import Control.Monad.Except (MonadError,throwError)
 import Graphics.UI.SDL (Window,Renderer,Rect)
 
+import Data.Vector (Vector)
 import Data.Map (Map)
 
 data Col = Col
@@ -47,7 +48,7 @@ data MeteorS = MeteorS
   { _meteorWindow   :: Window
   , _meteorRenderer :: Renderer
   , _meteorPlayer   :: (Player,Col)
-  , _meteorMissiles :: ActorMap
+  , _meteorMissiles :: Vector Rect
   , _meteorMobs     :: ActorMap
   , _gameover       :: Bool
   }
@@ -69,6 +70,15 @@ instance HasSDLErr (EitherT SDLErr IO) where
   decide' = hasSDLErr (const ()) (/= 0)
   
 type Et a = EitherT SDLErr IO a
+
+class HasRect a where
+    getRect :: a -> Rect
+
+instance HasRect Rect where
+    getRect = id
+
+instance HasRect Actor where
+    getRect = view actorRect
 
 newtype El a = El
   { unEl :: StateT MeteorS (EitherT SDLErr IO) a

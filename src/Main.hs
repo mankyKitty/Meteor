@@ -2,20 +2,27 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Main where
 
 import Prelude ()
 import BasePrelude hiding (left,right)
 
 import qualified Graphics.UI.SDL as SDL
+
 import qualified Data.Map as Map
 
-import Control.Lens (Lens',(^.),_1,(&),(%~),(#),traversed,(-=),to,(%=),(+=),(.~))
+import Control.Lens ( (^.),_1,(&),(%~),(#),(-=)
+                    , traversed,to,(+=),(.~),(%=)
+                    , use,_Just,view
+                    )
+
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Either (runEitherT)
-import Control.Monad.State (gets,modify)
+import Control.Monad.State (modify)
 
-import Foreign.C.Types (CInt)
+import Data.Vector (Vector)
+import qualified Data.Vector as V
 
 import Meteor.Types
 import Meteor.SDLExtras
@@ -23,82 +30,72 @@ import Meteor.Core
 
 removeHitMobs :: El ()
 removeHitMobs = do
-  -- Remove any mobs hit with missile
-  enemies <- gets _meteorMobs
-  bullets <- gets _meteorMissiles
-  let hits = getHits enemies bullets
+    hits <- getHits <$> use meteorMobs <*> use meteorMissiles
+    _ <- _Just h hits
+    return ()
+  where
+    w xs k _ = notElem k xs
 
-  maybe (return ())
-    (\(mobIds,bIds) -> do
-        meteorMobs %= Map.filterWithKey (\k _ -> k `notElem` mobIds)
-        meteorMissiles %= Map.filterWithKey (\k _ -> k `notElem` bIds)
-    )
-    hits
-  
+    h (mIds,bIds) = meteorMobs %= f mIds >> meteorMissiles %= g bIds
+    g ids = V.ifilter (w ids)
+    f ids = Map.filterWithKey (w ids)
+ 
+missileOffScreen :: HasRect a => a -> Bool
+missileOffScreen = (>=0) . view rectY' . getRect
+
 renderWith :: El ()
 renderWith = do
   ts <- SDL.getTicks
-  -- fetch our renderer
-  rndrr <- gets _meteorRenderer
-  -- FIRE ZE MISSILEZ!
   -- Remove all offscreen missiles
+  meteorMissiles %= V.filter missileOffScreen
   -- Move all the missiles
-  meteorMissiles %= Map.filter (^. actorRect . rectY' . to (>= 0))
-  meteorMissiles . traversed . actorRect . rectY' -= 2
+  meteorMissiles . traversed . rectY' -= 4
   -- Move all enemies down a rank
   when (ts `mod` 12 == 0) $ meteorMobs . traversed . actorRect . rectY' += 2
-
+  -- remove struck mobs and missiles
   removeHitMobs
-  -- Get our player
-  plyr <- gets _meteorPlayer
-              
   -- set the background colour
-  setColour rndrr 0x00 0x00 0x00 0xFF >> clearRender rndrr
-
+  use meteorRenderer >>= \r -> setColour r 0x00 0x00 0x00 0xFF >> clearRender r
   -- Render the player on the screen
-  drawRect rndrr plyr
-
-  -- Get our missiles
-  ms <- gets _meteorMissiles
-  mobs <- gets _meteorMobs
-  -- Render all missiles
-  traverse_ (drawRect rndrr . (,missileColour)) ms
-  traverse_ (drawRect rndrr . (,mobColour)) mobs
+  use meteorPlayer >>= uncurry d'
+  -- traverse the Vector and run monadic actions
+  use meteorMissiles >>= traverse_ dMis
+  use meteorMobs >>= traverse_ dMob
 
   -- present the updates.
-  SDL.renderPresent rndrr
-
-
-drawRect :: SDL.Renderer -> (Actor,Col) -> El ()
-drawRect rndr (actor,c) = setColour rndr r g b a >> renderRect rndr rct
+  use meteorRenderer >>= SDL.renderPresent
   where
-    rct = actor ^. actorRect
+    d' m c = use meteorRenderer >>= \r -> drawRectable r m c
+    dMob m = d' m mobColour
+    dMis m = d' m missileColour
+
+drawRectable :: HasRect a => SDL.Renderer -> a -> Col -> El ()
+drawRectable rndr x c = setColour rndr r g b a >> renderRect rndr rct
+  where
     (r,g,b,a) = c ^. _Col
+    rct = getRect x
 
 quitApp :: El ()
 quitApp = do
-  gets _meteorRenderer >>= SDL.destroyRenderer
-  gets _meteorWindow >>= SDL.destroyWindow
+  use meteorRenderer >>= SDL.destroyRenderer
+  use meteorWindow >>= SDL.destroyWindow
   SDL.quit
 
 dieE :: SDLErr -> IO ()
 dieE e = putStrLn $ "ERROR: " <> show e
 
-addMissile :: MeteorS -> ActorMap -> ActorMap
-addMissile s ms = Map.insert nextId newM ms
+addMissile :: MeteorS -> Vector SDL.Rect -> Vector SDL.Rect
+addMissile s = V.cons newM
   where
-    nextId = succ $ Map.size ms
-
-    ppos :: Lens' SDL.Rect CInt -> CInt
     ppos l = s ^. meteorPlayer . _1 . actorRect . l
 
-    newM = Actor (_Rect # (ppos rectX',ppos rectY',15,15))
-           Bullet
+    newM = _Rect # (ppos rectX',ppos rectY',15,15)
+           
 
 moveP :: SDL.Keysym -> MeteorS -> MeteorS
 moveP k s = case SDL.keysymKeycode k of
-  SDL.SDLK_LEFT -> lfr (subtract distance)
-  SDL.SDLK_RIGHT -> lfr (+distance)
+  SDL.SDLK_LEFT  -> posUpdate rectX' (subtract distance)
+  SDL.SDLK_RIGHT -> posUpdate rectX' (+distance)
   SDL.SDLK_SPACE -> s & meteorMissiles %~ addMissile s
   _ -> s
   where
@@ -108,8 +105,6 @@ moveP k s = case SDL.keysymKeycode k of
                       (\xV -> bnds screenWidth xV $ g xV)
 
     bnds sW o n = bool o n $ n > 0 && n < sW
-
-    lfr = posUpdate rectX'
 
 updatePlayer :: SDL.Event -> MeteorS -> MeteorS
 updatePlayer (SDL.KeyboardEvent SDL.SDL_KEYDOWN _ _ _ _ kSym) m = moveP kSym m
@@ -121,9 +116,9 @@ updateActors = maybe (return ()) (modify . updatePlayer)
 
 checkGameOver :: El Bool
 checkGameOver = do
-  fin <- gets _gameover
-  win <- gets _meteorMobs
-  p <- gets _meteorPlayer
+  fin <- use gameover
+  win <- use meteorMobs
+  p   <- use meteorPlayer
   return $ or [ fin
               , 0 == Map.size win
               , notEmpty $ passedPlayer p win
@@ -153,8 +148,7 @@ createMeteor = do
   eM <- runEitherT initialise 
   return $ mkMeteor <$> eM
   where
-    emptyBullets :: ActorMap
-    emptyBullets = Map.empty
+    emptyBullets = V.empty
 
     mkMeteor (w,r) = MeteorS w r
                      getInitialPlayer

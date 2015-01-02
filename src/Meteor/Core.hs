@@ -4,13 +4,17 @@ module Meteor.Core where
 import Prelude ()
 import BasePrelude
 
-import Control.Lens (Lens',(#),(^.),view,_1)
+import Control.Lens (Lens',(#),(^.),view)
 
 import Foreign.C.Types (CInt(..))
-import qualified Data.Map as Map
-import qualified Data.List as Lst
 import Meteor.Types
 import Meteor.SDLExtras
+
+import Data.Map (Map)
+import qualified Data.Map as Map
+
+import Data.Vector (Vector)
+import qualified Data.Vector as V
 
 import Graphics.UI.SDL (Rect)
 
@@ -44,14 +48,14 @@ getInitialMobs = Map.fromList $ lst mobs
     mobs = [mob x | x <- [100,200..600]]
     mob buf = Actor (_Rect # (screenWidth - buf, 20, 25,25)) NPC
 
-rectBnds :: Lens' Rect CInt -> Actor -> CInt
-rectBnds cart a = sum [ a ^. actorRect . cart
-                      , a ^. actorRect . rectW'
-                      , a ^. actorRect . rectH'
+rectBnds :: Lens' Rect CInt -> Rect -> CInt
+rectBnds cart a = sum [ a ^. cart
+                      , a ^. rectW'
+                      , a ^. rectH'
                       ]
 
-actorInter :: Actor -> Actor -> Bool
-actorInter a b = and [
+rectInter :: Rect -> Rect -> Bool
+rectInter a b = and [
   x1 a < x2 b,
   x2 a > x1 b,
 
@@ -59,19 +63,19 @@ actorInter a b = and [
   y2 a > y1 b
   ]
   where
-    x1 = view (actorRect . rectX')
-    y1 = view (actorRect . rectY')
+    x1 = view rectX'
+    y1 = view rectY'
 
     x2 = rectBnds rectX'
     y2 = rectBnds rectY'
     
-    
-hitsRegistered :: ActorMap -> NPC -> Maybe Int
-hitsRegistered bullets mob = (^. _1) <$> hit
-  where
-    hit = Lst.find (\(_,b) -> actorInter mob b) $ Map.toList bullets
+hitsRegistered :: HasRect a => Vector Rect -> a -> Maybe Int
+hitsRegistered bullets a = V.findIndex f bullets
+    where
+      mRect = getRect a
+      f = rectInter mRect
 
-getHits :: ActorMap -> ActorMap -> Maybe ([Int],[Int])
+getHits :: HasRect a => Map Int a -> Vector Rect -> Maybe ([Int],[Int])
 getHits m b
   | b == mempty = Nothing
   | otherwise = mayHits hits
