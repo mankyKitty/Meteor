@@ -48,11 +48,8 @@ getInitialMobs = Map.fromList $ lst mobs
     mobs = [mob x | x <- [100,200..600]]
     mob buf = Actor (_Rect # (screenWidth - buf, 20, 25,25)) NPC
 
-rectBnds :: Lens' Rect CInt -> Rect -> CInt
-rectBnds cart a = sum [ a ^. cart
-                      , a ^. rectW'
-                      , a ^. rectH'
-                      ]
+rectBnds :: Lens' Rect CInt -> Lens' Rect CInt -> Rect -> CInt
+rectBnds cart opp a = a ^. cart + a ^. opp
 
 rectInter :: Rect -> Rect -> Bool
 rectInter a b = and [
@@ -66,8 +63,8 @@ rectInter a b = and [
     x1 = view rectX'
     y1 = view rectY'
 
-    x2 = rectBnds rectX'
-    y2 = rectBnds rectY'
+    x2 = rectBnds rectX' rectW'
+    y2 = rectBnds rectY' rectH'
     
 hitsRegistered :: HasRect a => Vector Rect -> a -> Maybe Int
 hitsRegistered bullets a = V.findIndex f bullets

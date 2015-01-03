@@ -12,14 +12,13 @@ import qualified Graphics.UI.SDL as SDL
 
 import qualified Data.Map as Map
 
-import Control.Lens ( (^.),_1,(&),(%~),(#),(-=)
-                    , traversed,to,(+=),(.~),(%=)
-                    , use,_Just,view
+import Control.Lens ( (^.),_1,(#),(-=)
+                    , traversed,to,(+=),(%=)
+                    , use,_Just,view,(.=)
                     )
 
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Either (runEitherT)
-import Control.Monad.State (modify)
 
 import Data.Vector (Vector)
 import qualified Data.Vector as V
@@ -84,35 +83,34 @@ quitApp = do
 dieE :: SDLErr -> IO ()
 dieE e = putStrLn $ "ERROR: " <> show e
 
-addMissile :: MeteorS -> Vector SDL.Rect -> Vector SDL.Rect
-addMissile s = V.cons newM
+addMissile :: (Actor,Col) -> Vector SDL.Rect -> Vector SDL.Rect
+addMissile p = V.cons newM
   where
-    ppos l = s ^. meteorPlayer . _1 . actorRect . l
-
+    ppos l = p ^. _1 . actorRect . l
     newM = _Rect # (ppos rectX',ppos rectY',15,15)
-           
 
-moveP :: SDL.Keysym -> MeteorS -> MeteorS
-moveP k s = case SDL.keysymKeycode k of
+moveP :: SDL.Keysym -> El ()
+moveP k = case SDL.keysymKeycode k of
   SDL.SDLK_LEFT  -> posUpdate rectX' (subtract distance)
   SDL.SDLK_RIGHT -> posUpdate rectX' (+distance)
-  SDL.SDLK_SPACE -> s & meteorMissiles %~ addMissile s
-  _ -> s
+  SDL.SDLK_SPACE -> do
+    p <- use meteorPlayer
+    meteorMissiles %= addMissile p
+  _ -> return ()
   where
     distance = 10
-
-    posUpdate lns g = s & meteorPlayer . _1 . actorRect . lns %~
+    posUpdate lns g = meteorPlayer . _1 . actorRect . lns %=
                       (\xV -> bnds screenWidth xV $ g xV)
 
     bnds sW o n = bool o n $ n > 0 && n < sW
 
-updatePlayer :: SDL.Event -> MeteorS -> MeteorS
-updatePlayer (SDL.KeyboardEvent SDL.SDL_KEYDOWN _ _ _ _ kSym) m = moveP kSym m
-updatePlayer (SDL.QuitEvent _ _) m = m & gameover .~ True
-updatePlayer _ m = m
+updatePlayer :: SDL.Event -> El ()
+updatePlayer (SDL.KeyboardEvent SDL.SDL_KEYDOWN _ _ _ _ kSym) = moveP kSym
+updatePlayer (SDL.QuitEvent _ _) = gameover .= True
+updatePlayer _ = return ()
 
 updateActors :: Maybe SDL.Event -> El ()
-updateActors = maybe (return ()) (modify . updatePlayer)
+updateActors = maybe (return ()) updatePlayer
 
 checkGameOver :: El Bool
 checkGameOver = do
