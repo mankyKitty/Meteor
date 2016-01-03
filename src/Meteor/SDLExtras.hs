@@ -47,7 +47,7 @@ bitOr :: [Word32] -> Word32
 bitOr = foldl (.|.) 0
 
 initSDL :: HasSDLErr m => [Word32] -> m ()
-initSDL = decide' SDLInitError . SDL.init . bitOr
+initSDL = decide_ SDLInitError . SDL.init . bitOr
 
 mkRenderer :: HasSDLErr m => SDL.Window -> m SDL.Renderer
 mkRenderer w = decide isNullPtr RendererCreateError $ SDL.createRenderer w (-1) flags
@@ -120,10 +120,10 @@ with3
 with3 f x y z = liftIO $ with x (\x' -> with y $ with z . f x')
 
 clearRender :: HasSDLErr m => SDL.Renderer -> m ()
-clearRender rndr = decide' RenderClearError $ SDL.renderClear rndr
+clearRender rndr = decide_ RenderClearError $ SDL.renderClear rndr
 
 setColour :: HasSDLErr m => SDL.Renderer -> Word8 -> Word8 -> Word8 -> Word8 -> m ()
-setColour rndr r g b a = decide' ColourSetError $ SDL.setRenderDrawColor rndr r g b a
+setColour rndr r g b a = decide_ ColourSetError $ SDL.setRenderDrawColor rndr r g b a
 
 renderRect :: HasSDLErr m => SDL.Renderer -> Rect -> m ()
-renderRect rndr rct = decide' RenderError . with rct $ SDL.renderDrawRect rndr
+renderRect rndr rct = decide_ RenderError . with rct $ SDL.renderDrawRect rndr

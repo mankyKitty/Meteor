@@ -58,7 +58,7 @@ makeLenses ''MeteorS
 
 class (MonadIO m, MonadError SDLErr m) => HasSDLErr m where
   decide  :: (a -> Bool) -> SDLErr -> IO a -> m a
-  decide' :: (Eq n, Num n) => SDLErr -> IO n -> m ()
+  decide_ :: (Eq n, Num n) => SDLErr -> IO n -> m ()
 
 hasSDLErr
   :: ( MonadIO m
@@ -75,11 +75,11 @@ hasSDLErr g f e a = liftIO a >>= hasE
 
 instance HasSDLErr El where
   decide  = hasSDLErr id
-  decide' = hasSDLErr (const ()) (/= 0)
+  decide_ = hasSDLErr (const ()) (/= 0)
 
 instance HasSDLErr (EitherT SDLErr IO) where
   decide  = hasSDLErr id
-  decide' = hasSDLErr (const ()) (/= 0)
+  decide_ = hasSDLErr (const ()) (/= 0)
 
 type Et a = EitherT SDLErr IO a
 
