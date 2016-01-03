@@ -2,16 +2,17 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Meteor.SDLExtras where
 
-import Prelude ()
-import BasePrelude hiding (left,right,bool)
-
 import qualified Graphics.UI.SDL as SDL
 import Graphics.UI.SDL.Types (Rect(..))
+
+import Data.Bits ((.|.))
+import Data.Word (Word8,Word32)
 
 import Foreign.C.Types
 import Foreign.Ptr
 import Foreign (Storable,peek,alloca,with,maybePeek)
 
+import Control.Monad (liftM)
 import Control.Lens (makePrisms,to,_3,(^.),Traversal',Lens',lens)
 import Control.Monad.IO.Class (MonadIO,liftIO)
 
@@ -63,7 +64,7 @@ mkWindow t h w = decide isNullPtr WindowCreateError . withCAString t $ \title ->
                  flags
   where
     flags = bitOr [SDL.SDL_WINDOW_OPENGL,SDL.SDL_WINDOW_INPUT_GRABBED]
-           
+
 mkWindowAndRenderer :: HasSDLErr m => CInt -> CInt -> m (SDL.Window, SDL.Renderer,CInt)
 mkWindowAndRenderer height width = chk . alloca $ \wP -> rF wP
   where
@@ -97,7 +98,7 @@ handleE st = return $ maybe False (
                SDL.QuitEvent _ _ -> True
                _                 -> False
              ) st
-  
+
 applyToPointer :: (Storable a) => (a -> b) -> Ptr a -> IO b
 applyToPointer op' ptr = liftM op' $ peek ptr
 

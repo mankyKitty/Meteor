@@ -1,56 +1,55 @@
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PatternSynonyms   #-}
+{-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE TupleSections     #-}
 module Main where
 
-import Prelude ()
-import BasePrelude hiding (left,right)
+import qualified Graphics.UI.SDL            as SDL
 
-import qualified Graphics.UI.SDL as SDL
+import qualified Data.Map                   as Map
 
-import qualified Data.Map as Map
+import           Control.Lens               (to, traversed, use, view, ( # ),
+                                             (%=), (+=), (.=), (^.), _1,
+                                             (%~), _Just)
 
-import Control.Lens ( (^.),_1,(#),(-=)
-                    , traversed,to,(+=),(%=)
-                    , use,_Just,view,(.=)
-                    )
+import           Control.Monad              (unless, when)
+import           Control.Monad.IO.Class     (liftIO)
+import           Control.Monad.Trans.Either (runEitherT)
 
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.Either (runEitherT)
+import           Data.Bool                  (bool)
+import           Data.Foldable              (traverse_)
+import           Data.Monoid                ((<>))
+import           Data.Vector                (Vector)
+import qualified Data.Vector                as V
 
-import Data.Vector (Vector)
-import qualified Data.Vector as V
-
-import Meteor.Types
-import Meteor.SDLExtras
-import Meteor.Core
+import           Meteor.Core
+import           Meteor.SDLExtras
+import           Meteor.Types
 
 removeHitMobs :: El ()
 removeHitMobs = do
     hits <- getHits <$> use meteorMobs <*> use meteorMissiles
     _ <- _Just h hits
-    return ()
+    pure ()
   where
     w xs k _ = notElem k xs
 
     h (mIds,bIds) = meteorMobs %= f mIds >> meteorMissiles %= g bIds
     g ids = V.ifilter (w ids)
     f ids = Map.filterWithKey (w ids)
- 
+
 missileOffScreen :: HasRect a => a -> Bool
 missileOffScreen = (>=0) . view rectY' . getRect
 
 renderWith :: El ()
 renderWith = do
   ts <- SDL.getTicks
-  -- Remove all offscreen missiles
-  meteorMissiles %= V.filter missileOffScreen
-  -- Move all the missiles
-  meteorMissiles . traversed . rectY' -= 4
+  -- Remove all offscreen missiles, move the rest
+  meteorMissiles %= fmap (rectY' %~ subtract 4) . V.filter missileOffScreen
   -- Move all enemies down a rank
-  when (ts `mod` 12 == 0) $ meteorMobs . traversed . actorRect . rectY' += 2
+  when (ts `mod` 12 == 0) $
+    meteorMobs . traversed . actorRect . rectY' += 2
   -- remove struck mobs and missiles
   removeHitMobs
   -- set the background colour
@@ -96,7 +95,7 @@ moveP k = case SDL.keysymKeycode k of
   SDL.SDLK_SPACE -> do
     p <- use meteorPlayer
     meteorMissiles %= addMissile p
-  _ -> return ()
+  _ -> pure ()
   where
     distance = 10
     posUpdate lns g = meteorPlayer . _1 . actorRect . lns %=
@@ -106,21 +105,21 @@ moveP k = case SDL.keysymKeycode k of
 
 updatePlayer :: SDL.Event -> El ()
 updatePlayer (SDL.KeyboardEvent SDL.SDL_KEYDOWN _ _ _ _ kSym) = moveP kSym
-updatePlayer (SDL.QuitEvent _ _) = gameover .= True
-updatePlayer _ = return ()
+updatePlayer (SDL.QuitEvent _ _)                              = gameover .= True
+updatePlayer _                                                = pure ()
 
 updateActors :: Maybe SDL.Event -> El ()
-updateActors = maybe (return ()) updatePlayer
+updateActors = maybe (pure ()) updatePlayer
 
 checkGameOver :: El Bool
 checkGameOver = do
   fin <- use gameover
   win <- use meteorMobs
   p   <- use meteorPlayer
-  return $ or [ fin
-              , 0 == Map.size win
-              , notEmpty $ passedPlayer p win
-              ]
+  pure $ or [ fin
+            , 0 == Map.size win
+            , notEmpty $ passedPlayer p win
+            ]
   where
     notEmpty = (>0) . Map.size
     passedPlayer p =
@@ -139,12 +138,12 @@ initialise = do
   initSDL [SDL.SDL_INIT_VIDEO]
   win <- mkWindow "Meteor!" screenHeight screenWidth
   rdr <- mkRenderer win
-  return (win,rdr)
+  pure (win,rdr)
 
 createMeteor :: IO (Either SDLErr MeteorS)
 createMeteor = do
-  eM <- runEitherT initialise 
-  return $ mkMeteor <$> eM
+  eM <- runEitherT initialise
+  pure $ mkMeteor <$> eM
   where
     emptyBullets = V.empty
 

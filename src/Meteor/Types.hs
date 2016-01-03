@@ -1,22 +1,24 @@
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeFamilies               #-}
 module Meteor.Types where
 
-import Prelude ()
-import BasePrelude
+import           Control.Lens               (makeLenses, makePrisms, view)
 
-import Control.Lens (makeLenses,makePrisms,view)
-import Control.Monad.IO.Class (MonadIO,liftIO)
-import Control.Monad.Trans.Either (EitherT(..),runEitherT)
-import Control.Monad.State (StateT(..),MonadState)
-import Control.Monad.Except (MonadError,throwError)
-import Graphics.UI.SDL (Window,Renderer,Rect)
+import           Control.Monad.Except       (MonadError, throwError)
+import           Control.Monad.IO.Class     (MonadIO, liftIO)
+import           Control.Monad.State        (MonadState, StateT (..))
+import           Control.Monad.Trans.Either (EitherT (..), runEitherT)
 
-import Data.Vector (Vector)
-import Data.Map (Map)
+import           Data.Bool                  (bool)
+import           Data.Word                  (Word8)
+import           Graphics.UI.SDL            (Rect, Renderer, Window)
+
+import           Data.Map                   (Map)
+import           Data.Vector                (Vector)
 
 data Col = Col
   { _colRed   :: Word8
@@ -58,8 +60,18 @@ class (MonadIO m, MonadError SDLErr m) => HasSDLErr m where
   decide  :: (a -> Bool) -> SDLErr -> IO a -> m a
   decide' :: (Eq n, Num n) => SDLErr -> IO n -> m ()
 
-hasSDLErr :: (MonadIO m, MonadError e m) => (a -> b) -> (a -> Bool) -> e -> IO a -> m b
-hasSDLErr g f e a = liftIO a >>= \r -> bool (return $ g r) (throwError e) $ f r
+hasSDLErr
+  :: ( MonadIO m
+     , MonadError e m
+     )
+  => (a -> b)
+  -> (a -> Bool)
+  -> e
+  -> IO a
+  -> m b
+hasSDLErr g f e a = liftIO a >>= hasE
+  where
+    hasE r = bool (return $ g r) (throwError e) $ f r
 
 instance HasSDLErr El where
   decide  = hasSDLErr id
@@ -68,7 +80,7 @@ instance HasSDLErr El where
 instance HasSDLErr (EitherT SDLErr IO) where
   decide  = hasSDLErr id
   decide' = hasSDLErr (const ()) (/= 0)
-  
+
 type Et a = EitherT SDLErr IO a
 
 class HasRect a where
@@ -100,5 +112,11 @@ data SDLErr
   | ColourSetError
   deriving Show
 
-runEl :: (Monad m, MonadIO m) => MeteorS -> El a -> m (Either SDLErr (a,MeteorS))
+runEl 
+  :: ( Monad m
+     , MonadIO m
+     ) 
+  => MeteorS 
+  -> El a 
+  -> m (Either SDLErr (a,MeteorS))
 runEl meteorS = liftIO . runEitherT . flip runStateT meteorS . unEl

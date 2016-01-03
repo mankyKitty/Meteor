@@ -19,10 +19,11 @@ cabal-version:       >=1.10
 executable Meteor
   main-is:             Main.hs
   ghc-options:         -Wall -Werror -fwarn-tabs -O2 -threaded -rtsopts
-  -- other-modules:       
-  -- other-extensions:    
-  build-depends:       base >=4.7 && <4.8
-                     , base-prelude
+  other-modules:       Meteor.Core,
+                       Meteor.SDLExtras,
+                       Meteor.Types
+  -- other-extensions:
+  build-depends:       base >=4.8 && <5
                      , mtl
                      , transformers
                      , bifunctors >= 4.2

@@ -1,22 +1,24 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE RankNTypes        #-}
 module Meteor.Core where
 
-import Prelude ()
-import BasePrelude
+import           Prelude          hiding ((.))
 
-import Control.Lens (Lens',(#),(^.),view)
+import           Control.Category ((.))
+import           Control.Lens     (Lens', view, ( # ), (^.))
 
-import Foreign.C.Types (CInt(..))
-import Meteor.Types
-import Meteor.SDLExtras
+import           Foreign.C.Types  (CInt (..))
 
-import Data.Map (Map)
-import qualified Data.Map as Map
+import           Data.Bool        (bool)
+import           Data.Map         (Map)
+import qualified Data.Map         as Map
+import           Data.Vector      (Vector)
+import qualified Data.Vector      as V
 
-import Data.Vector (Vector)
-import qualified Data.Vector as V
+import           Graphics.UI.SDL  (Rect)
 
-import Graphics.UI.SDL (Rect)
+import           Meteor.SDLExtras
+import           Meteor.Types
 
 screenHeight :: CInt
 screenHeight = 480
@@ -32,13 +34,9 @@ playerStart = Actor
               (_Rect # (screenWidth `div` 2, screenHeight - 60, 30, 30))
               Player
 
-playerColour :: Col
-playerColour = _Col # (0xFF,0x00,0xFF,0x00)
-
-mobColour :: Col
-mobColour = _Col # (0xAA,0xFF,0xBB,0xFF)
-
-missileColour :: Col
+playerColour, mobColour, missileColour :: Col
+playerColour  = _Col # (0xFF,0x00,0xFF,0x00)
+mobColour     = _Col # (0xAA,0xFF,0xBB,0xFF)
 missileColour = _Col # (0x00,0xFF,0xFF,0x00)
 
 getInitialMobs :: ActorMap
@@ -65,7 +63,7 @@ rectInter a b = and [
 
     x2 = rectBnds rectX' rectW'
     y2 = rectBnds rectY' rectH'
-    
+
 hitsRegistered :: HasRect a => Vector Rect -> a -> Maybe Int
 hitsRegistered bullets a = V.findIndex f bullets
     where
